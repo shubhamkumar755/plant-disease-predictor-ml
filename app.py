@@ -11,7 +11,7 @@ import streamlit as st
 
 # Setup working directory
 working_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = f"{working_dir}/plant_disease_prediction_model.h5"
+model_path = None
 class_indices_path = f"{working_dir}/class_indices.json"
 
 # Google Drive model download URL
