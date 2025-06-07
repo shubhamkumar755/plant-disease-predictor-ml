@@ -1,3 +1,4 @@
+print("App is starting")
 import os
 import json
 import time
