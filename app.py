@@ -1,61 +1,71 @@
 import os
 import json
+import time
 import gdown
-import tensorflow as tf
-import numpy as np
 from PIL import Image
+
+import numpy as np
+import tensorflow as tf
 import streamlit as st
 
-# Set working directory & model paths
+# Setup working directory
 working_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(working_dir, "plant_disease_prediction_model.h5")
-class_indices_path = os.path.join(working_dir, "class_indices.json")
+model_path = f"{working_dir}/plant_disease_prediction_model.h5"
+class_indices_path = f"{working_dir}/class_indices.json"
 
-# Google Drive model download URL (your own file ID)
+# Google Drive model download URL
 gdrive_url = "https://drive.google.com/uc?id=1gXWh24HlPCVB8HWBADoRVxGBbxX-S5VI"
 
-st.title("🌿 Plant Disease Classifier")
+# Download the model if not already downloaded
+if not os.path.exists(model_path):
+    st.warning("Model not found. Downloading model (500MB)... ")
+    start_time = time.time()
 
-@st.cache_resource
-def download_and_load_model():
-    # Download model every time (overwrite if exists)
-    st.info("Downloading model (500MB) from Google Drive, please wait...")
-    gdown.download(gdrive_url, model_path, quiet=False)
-    
-    st.info("Loading model...")
-    model = tf.keras.models.load_model(model_path)
-    return model
+    # Show progress bar
+    with st.spinner("Downloading model... This may take upto 5min depending on your network."):
+        gdown.download(gdrive_url, model_path, quiet=False)
 
-# Load model (download + load cached in session)
-model = download_and_load_model()
+    end_time = time.time()
+    duration = round(end_time - start_time, 2)
+    st.success(f"✅ Model downloaded in {duration} seconds.")
 
-# Load class indices JSON once
-with open(class_indices_path, 'r') as f:
-    class_indices = json.load(f)
+# Load the pretrained model
+model = tf.keras.models.load_model(model_path)
 
-def preprocess_image(image: Image.Image, target_size=(224, 224)):
-    img = image.resize(target_size)
+# Load class indices
+class_indices = json.load(open(class_indices_path))
+
+# Image preprocessing function
+def load_and_preprocess_image(image_path, target_size=(224, 224)):
+    img = Image.open(image_path)
+    img = img.resize(target_size)
     img_array = np.array(img)
-    if img_array.shape[-1] == 4:  # if PNG with alpha channel, remove alpha
-        img_array = img_array[..., :3]
     img_array = np.expand_dims(img_array, axis=0)
-    img_array = img_array.astype('float32') / 255.0
+    img_array = img_array.astype("float32") / 255.
     return img_array
 
-def predict_image_class(model, image, class_indices):
-    preprocessed = preprocess_image(image)
-    preds = model.predict(preprocessed)
-    pred_idx = np.argmax(preds, axis=1)[0]
-    pred_label = class_indices[str(pred_idx)]
-    return pred_label
+# Prediction function
+def predict_image_class(model, image_path, class_indices):
+    preprocessed_image = load_and_preprocess_image(image_path)
+    predictions = model.predict(preprocessed_image)
+    predicted_class_index = np.argmax(predictions, axis=1)[0]
+    predicted_class_name = class_indices[str(predicted_class_index)]
+    return predicted_class_name
 
-uploaded_file = st.file_uploader("Upload a plant image (jpg/png)", type=['jpg', 'jpeg', 'png'])
+# Streamlit UI
+st.title("🌿 Plant Disease Classifier")
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image.resize((200, 200)), caption="Uploaded Image", use_column_width=False)
+uploaded_image = st.file_uploader("Upload a plant image (jpg/png)...", type=["jpg", "jpeg", "png"])
 
-    if st.button("Classify"):
-        with st.spinner("Classifying..."):
-            prediction = predict_image_class(model, image, class_indices)
+if uploaded_image is not None:
+    image = Image.open(uploaded_image)
+    col1, col2 = st.columns(2)
+
+    with col1:
+        resized_img = image.resize((150, 150))
+        st.image(resized_img)
+
+    with col2:
+        if st.button("Classify"):
+            prediction = predict_image_class(model, uploaded_image, class_indices)
             st.success(f"Prediction: {prediction}")
